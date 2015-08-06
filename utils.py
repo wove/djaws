@@ -18,7 +18,7 @@ def create_file_dict(content_directory):
     """
     Creates a dictionary of files from the content_directory with relative
     paths as keys and absolute paths as values (keys for files at root level do
-    not include './' prefix)
+    not include the './' prefix)
     """
     site_files = {}
     for root, dir_names, file_names in os.walk(content_directory):
