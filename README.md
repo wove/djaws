@@ -5,6 +5,7 @@
 * Add Route 53 / domain configuration
 * Add tests
 * Package it up
+* Update this documentation
 
 #### Usage
 **Add configuration to `settings.py`**
@@ -17,10 +18,13 @@
 
 **Publish your site**
 
- `bucket_name` must be a string that complies with the [s3 bucket naming rules](http://docs.aws.amazon.com/AmazonS3/latest/dev/BucketRestrictions.html#bucketnamingrules) 
+ `name` must be a string that complies with the [s3 bucket naming rules](http://docs.aws.amazon.com/AmazonS3/latest/dev/BucketRestrictions.html#bucketnamingrules) 
 
-    publish_site('bucket_name')
+    from djaws import Site
+
+    site = Site('name')
+    site.publish_site()
 
 **Delete your site**
 
-    delete_site('bucket_name')
+    site.delete_site()
