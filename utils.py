@@ -91,11 +91,20 @@ class Site:
         bucket.delete()
 
     def validate_site_name(self, name):
+        """
+        Ensures the site name is DNS compliant and creates a secondary name with
+        the 'www' prefix if the site name doesn't include it and a secondary name
+        without the 'www' prefix if the site name does include it.
+        """
         allowed = re.compile("(?!-)[A-Z\d-]{1,63}(?<!-)$", re.IGNORECASE)
         if all(allowed.match(x) for x in name.split(".")):
             self.name = name
         else:
             raise ValueError('{} is not a DNS compliant name.'.format(name))
+        if name.split('.')[0] == 'www':
+            self.secondary_name = name.partition('www.')[2]
+        else:
+            self.secondary_name = 'www.{}'.format(name)
 
     def __init__(self, name,
                  aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
