@@ -16,7 +16,7 @@
     AWS_ACCESS_KEY_ID = 'your access key ID'
     AWS_SECRET_ACCESS_KEY = 'your secret access key'
 
-**Publish your site**
+**Publish or update your site**
 
  `name` must be a string that complies with the [s3 bucket naming rules](http://docs.aws.amazon.com/AmazonS3/latest/dev/BucketRestrictions.html#bucketnamingrules) 
 

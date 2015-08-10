@@ -3,25 +3,35 @@ import re
 from django.conf import settings
 from boto import connect_s3
 from boto.s3.key import Key
+from boto.s3.website import RedirectLocation
 
 
 class Site:
-    def get_or_create_bucket(self, connection=None):
+    def create_buckets(self, connection=None):
         """
-        Gets an s3 bucket by name or creates a new bucket if the bucket does not
-        exist, then configures the bucket as a website
+        Creates and configures a new bucket as a website. Also creates and
+        configures a secondary bucket that is redirected to the primary website
+        bucket. The buckets are created using `name` and `secondary_name`
+        respectively.
+
+        If the buckets already exist no new buckets are created.
         """
         if connection is None:
             connection = connect_s3(self.aws_access_key_id,
                                     self.aws_secret_access_key)
+        # create primary bucket and configure as website
         bucket = connection.create_bucket(self.name, policy='public-read')
         bucket.configure_website(suffix='index.html', error_key='error.html')
+        # create secondary bucket that redirects to primary bucket
+        secondary_bucket = connection.create_bucket(self.secondary_name)
+        redirect_location = RedirectLocation(hostname=self.name)
+        secondary_bucket.configure_website(redirect_all_requests_to=redirect_location)
 
     def create_file_dict(self):
         """
-        Creates a dictionary of files from the content_directory with relative
-        paths as keys and absolute paths as values (keys for files at root level
-        do not include the './' prefix)
+        Creates a dictionary of files from `content_directory` with relative
+        paths as keys and absolute paths as values. Keys for files at root level
+        do not include the './' prefix.
         """
         site_files = {}
         for root, dir_names, file_names in os.walk(self.content_directory):
@@ -73,7 +83,7 @@ class Site:
         """
         connection = connect_s3(self.aws_access_key_id,
                                 self.aws_secret_access_key)
-        self.get_or_create_bucket(connection=connection)
+        self.create_buckets(connection=connection)
         bucket = connection.get_bucket(self.name)
         self.create_file_dict()
         self.upload_site_files(bucket=bucket, connection=connection)
@@ -81,14 +91,15 @@ class Site:
 
     def delete_site(self):
         """
-        Deletes the s3 bucket
+        Deletes the s3 website and redirected buckets
         """
         connection = connect_s3(self.aws_access_key_id,
                                 self.aws_secret_access_key)
-        bucket = connection.get_bucket(self.name)
-        bucket_list_result = bucket.list()
-        bucket.delete_keys([key.name for key in bucket_list_result])
-        bucket.delete()
+        for bucket_name in (self.name, self.secondary_name):
+            bucket = connection.get_bucket(bucket_name)
+            bucket_list_result = bucket.list()
+            bucket.delete_keys([key.name for key in bucket_list_result])
+            bucket.delete()
 
     def validate_site_name(self, name):
         """
