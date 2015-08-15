@@ -58,4 +58,4 @@ Only available if `hosted_zone=True` set when site was published.
 
   * *method* **Site.delete_site**()
 
- Deletes the s3 buckets and any associated hosted zone.
+    * Deletes the s3 buckets and any associated hosted zone.
