@@ -50,7 +50,7 @@ Only available if `hosted_zone=True` set when site was published.
 
  Creates and configures a new bucket as a website as well as a secondary redirected bucket if they don't already exist. Then uploads files from the `content_directory` to the primary website bucket and deletes any redundant objects from the bucket and creates an optional hosted zone with alias records for each bucket.
 
-      * *parameters:*
+    * *parameters:*
 
         * hosted\_zone - (bool) if `True` creates a hosted zone with alias records for each bucket.
 
