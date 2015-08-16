@@ -1,10 +1,19 @@
 import os
 import re
+import hashlib
 from django.conf import settings
 from boto import connect_s3
 from boto import connect_route53
 from boto.s3.key import Key
 from boto.s3.website import RedirectLocation
+
+
+def hashfile(a_file, hasher, blocksize=65536):
+    buf = a_file.read(blocksize)
+    while len(buf) > 0:
+        hasher.update(buf)
+        buf = a_file.read(blocksize)
+    return hasher.hexdigest()
 
 
 class Site:
@@ -67,8 +76,8 @@ class Site:
     def create_file_dict(self):
         """
         Returns a dictionary of files from `content_directory` with relative
-        paths as keys and absolute paths as values. Keys for files at root level
-        do not include the './' prefix.
+        paths as keys and a nested dictionary with absolute paths and md5 hashes
+        as values. Keys for files at root level do not include the './' prefix.
         """
         site_files = {}
         for root, dir_names, file_names in os.walk(self.content_directory):
@@ -78,28 +87,16 @@ class Site:
                     key = file_name
                 else:
                     key = os.path.join(rel_path, file_name)
-                value = os.path.join(root, file_name)
-                site_files[key] = value
+                file_path = os.path.join(root, file_name)
+                etag = hashfile(open(file_path, 'rb'), hashlib.md5())
+                site_files[key] = {'path': file_path, 'etag': etag}
         return site_files
 
     def upload_site_files(self, bucket=None, s3_connection=None):
         """
-        Uploads files in `site_files` dictionary to the website bucket.
-        """
-        if s3_connection is None:
-            s3_connection = connect_s3(self.aws_access_key_id,
-                                       self.aws_secret_access_key)
-        if bucket is None:
-            bucket = s3_connection.get_bucket(self.name)
-        for key, value in self.site_files.iteritems():
-            k = Key(bucket)
-            k.key = key
-            k.set_contents_from_filename(value, policy='public-read')
-
-    def delete_redundant_objects(self, bucket=None, s3_connection=None):
-        """
-        Deletes objects from the website bucket that aren't in the `site_files`
-        dictionary.
+        Uploads files in `site_files` dictionary to the website bucket if a file
+        with the same etag doesn't already exist in the bucket and deletes any
+        files in the bucket that aren't in the `site_files` dictionary.
         """
         if s3_connection is None:
             s3_connection = connect_s3(self.aws_access_key_id,
@@ -107,11 +104,18 @@ class Site:
         if bucket is None:
             bucket = s3_connection.get_bucket(self.name)
         bucket_list_result = bucket.list()
-        obsolete_keys = []
+        s3_keys = {}
+        obsolete_s3_keys = []
         for key in bucket_list_result:
+            s3_keys[key.name] = key.etag[1:-1]
             if key.name not in self.site_files:
-                obsolete_keys.append(key.name)
-        bucket.delete_keys(obsolete_keys)
+                obsolete_s3_keys.append(key.name)
+        bucket.delete_keys(obsolete_s3_keys)
+        for key, value in self.site_files.iteritems():
+            if value['etag'] != s3_keys[key]:
+                k = Key(bucket)
+                k.key = key
+                k.set_contents_from_filename(value['path'], policy='public-read')
 
     def delete_site(self):
         """
@@ -203,7 +207,6 @@ class Site:
         bucket = s3_connection.get_bucket(self.name)
         self.site_files = self.create_file_dict()
         self.upload_site_files(bucket=bucket, s3_connection=s3_connection)
-        self.delete_redundant_objects(bucket=bucket, s3_connection=s3_connection)
         if hosted_zone:
             self.create_hosted_zone()
 
