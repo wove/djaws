@@ -49,6 +49,16 @@ class Site:
              'hosted_zone_id': 'Z21DNDUVLTQW6Q'}
     }
 
+    def create_alternate_name(self, name):
+        """
+        Returns `name` without 'www' prefix if it is included or with 'www'
+        prefix if it is not included.
+        """
+        if name.split('.')[0] == 'www':
+            return name.partition('www.')[2]
+        else:
+            return 'www.{}'.format(self.name)
+
     def create_buckets(self, s3_connection=None, location=''):
         """
         Creates and configures a new bucket as a website. Also creates and
@@ -92,73 +102,6 @@ class Site:
                 site_files[key] = {'path': file_path, 'etag': etag}
         return site_files
 
-    def upload_site_files(self, bucket=None, s3_connection=None):
-        """
-        Uploads files in `site_files` dictionary to the website bucket if a file
-        with the same etag doesn't already exist in the bucket and deletes any
-        files in the bucket that aren't in the `site_files` dictionary.
-        """
-        if s3_connection is None:
-            s3_connection = connect_s3(self.aws_access_key_id,
-                                       self.aws_secret_access_key)
-        if bucket is None:
-            bucket = s3_connection.get_bucket(self.name)
-        bucket_list_result = bucket.list()
-        s3_keys = {}
-        obsolete_s3_keys = []
-        for key in bucket_list_result:
-            s3_keys[key.name] = key.etag[1:-1]
-            if key.name not in self.site_files:
-                obsolete_s3_keys.append(key.name)
-        bucket.delete_keys(obsolete_s3_keys)
-        for key, value in self.site_files.iteritems():
-            if value['etag'] != s3_keys[key]:
-                k = Key(bucket)
-                k.key = key
-                k.set_contents_from_filename(value['path'], policy='public-read')
-
-    def delete_site(self):
-        """
-        Deletes the s3 buckets.
-        """
-        s3_connection = connect_s3(self.aws_access_key_id,
-                                   self.aws_secret_access_key)
-        for bucket_name in (self.name, self.secondary_name):
-            bucket = s3_connection.get_bucket(bucket_name)
-            bucket_list_result = bucket.list()
-            bucket.delete_keys([key.name for key in bucket_list_result])
-            bucket.delete()
-
-    def validate_location(self, location):
-        if location in self.LOCATIONS:
-            self.location = location
-            self.hosted_zone_id = self.LOCATIONS[self.location]['hosted_zone_id']
-            self.website_endpoint = self.LOCATIONS[self.location]['website_endpoint']
-        else:
-            raise ValueError('{} is not a valid location. Must be one of {}'
-                             .format(location, self.LOCATIONS.keys()))
-
-    def validate_site_name(self, name):
-        """
-        Ensures `name` is DNS compliant
-        """
-        allowed = re.compile("(?!-)[A-Z\d-]{1,63}(?<!-)$", re.IGNORECASE)
-        if all(allowed.match(x) for x in name.split(".")):
-            self.name = name
-            self.secondary_name = self.create_alternate_name(name)
-        else:
-            raise ValueError('{} is not a DNS compliant name.'.format(name))
-
-    def create_alternate_name(self, name):
-        """
-        Returns `name` without 'www' prefix if it is included or with 'www'
-        prefix if it is not included.
-        """
-        if name.split('.')[0] == 'www':
-            return name.partition('www.')[2]
-        else:
-            return 'www.{}'.format(self.name)
-
     def create_hosted_zone(self):
         """
         Creates a hosted zone with alias records for the site and adds a list
@@ -182,23 +125,42 @@ class Site:
         records.commit()
         self.nameservers = zone.get_nameservers()
 
-    def delete_hosted_zone(self):
+    def delete_hosted_zone(self, r53_connection=None, zone=None):
         """
         Deletes a hosted zone named `self.name`
         """
-        r53_connection = connect_route53(self.aws_access_key_id,
-                                         self.aws_secret_access_key)
-        zone = r53_connection.get_zone(self.name + '.')
+        if r53_connection is None:
+            r53_connection = connect_route53(self.aws_access_key_id,
+                                             self.aws_secret_access_key)
+        if zone is None:
+            zone = r53_connection.get_zone(self.name + '.')
         zone.delete_a(self.name + '.', all=True)
         zone.delete_a(self.secondary_name + '.', all=True)
         zone.delete()
 
+    def delete_site(self):
+        """
+        Deletes the s3 buckets.
+        """
+        s3_connection = connect_s3(self.aws_access_key_id,
+                                   self.aws_secret_access_key)
+        r53_connection = connect_route53(self.aws_access_key_id,
+                                         self.aws_secret_access_key)
+        for bucket_name in (self.name, self.secondary_name):
+            bucket = s3_connection.get_bucket(bucket_name)
+            bucket_list_result = bucket.list()
+            bucket.delete_keys([key.name for key in bucket_list_result])
+            bucket.delete()
+        zone = r53_connection.get_zone(self.name + '.')
+        if zone is not None:
+            self.delete_hosted_zone(r53_connection=r53_connection, zone=zone)
+
     def publish_site(self, hosted_zone=False, location=''):
         """
         Creates and configures a new bucket as a website as well as a secondary
-        redirected bucket if they don't already exist, then uploads files from
-        the `content_directory` to the website bucket and deletes any redundant
-        objects from the bucket and creates an optional hosted zone.
+        redirected bucket if they don't already exist, then uploads new and changed
+        files from the `content_directory` to the website bucket, deletes any
+        redundant objects from the bucket and creates an optional hosted zone.
         """
         self.validate_location(location)
         s3_connection = connect_s3(self.aws_access_key_id,
@@ -209,6 +171,51 @@ class Site:
         self.upload_site_files(bucket=bucket, s3_connection=s3_connection)
         if hosted_zone:
             self.create_hosted_zone()
+
+    def upload_site_files(self, bucket=None, s3_connection=None):
+        """
+        Uploads files in `site_files` dictionary to the website bucket if a file
+        with the same etag doesn't already exist in the bucket and deletes any
+        files in the bucket that aren't in the `site_files` dictionary.
+        """
+        if s3_connection is None:
+            s3_connection = connect_s3(self.aws_access_key_id,
+                                       self.aws_secret_access_key)
+        if bucket is None:
+            bucket = s3_connection.get_bucket(self.name)
+        bucket_list_result = bucket.list()
+        s3_keys = {}
+        obsolete_s3_keys = []
+        for key in bucket_list_result:
+            s3_keys[key.name] = key.etag[1:-1]
+            if key.name not in self.site_files:
+                obsolete_s3_keys.append(key.name)
+        bucket.delete_keys(obsolete_s3_keys)
+        for key, value in self.site_files.iteritems():
+            if (key not in s3_keys) or (value['etag'] != s3_keys[key]):
+                k = Key(bucket)
+                k.key = key
+                k.set_contents_from_filename(value['path'], policy='public-read')
+
+    def validate_location(self, location):
+        if location in self.LOCATIONS:
+            self.location = location
+            self.hosted_zone_id = self.LOCATIONS[self.location]['hosted_zone_id']
+            self.website_endpoint = self.LOCATIONS[self.location]['website_endpoint']
+        else:
+            raise ValueError('{} is not a valid location. Must be one of {}'
+                             .format(location, self.LOCATIONS.keys()))
+
+    def validate_site_name(self, name):
+        """
+        Ensures `name` is DNS compliant
+        """
+        allowed = re.compile("(?!-)[A-Z\d-]{1,63}(?<!-)$", re.IGNORECASE)
+        if all(allowed.match(x) for x in name.split(".")):
+            self.name = name
+            self.secondary_name = self.create_alternate_name(name)
+        else:
+            raise ValueError('{} is not a DNS compliant name.'.format(name))
 
     def __init__(self, name,
                  aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
