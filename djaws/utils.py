@@ -114,16 +114,15 @@ class Site:
         zone = r53_connection.get_zone(self.name + '.')
         if zone is None:
             zone = r53_connection.create_zone(self.name + '.')
-        self.zone_id = zone.id
-        # Adds alias records for `site.name` and `site.secondary_name` buckets
-        records = zone.get_records()
-        for name in (self.name, self.secondary_name):
-            records.add_change('CREATE', name, 'A',
-                               alias_hosted_zone_id=self.hosted_zone_id,
-                               alias_dns_name=self.website_endpoint,
-                               alias_evaluate_target_health=False)
-        records.commit()
-        self.nameservers = zone.get_nameservers()
+            # Adds alias records for `site.name` and `site.secondary_name` buckets
+            records = zone.get_records()
+            for name in (self.name, self.secondary_name):
+                records.add_change('CREATE', name, 'A',
+                                   alias_hosted_zone_id=self.hosted_zone_id,
+                                   alias_dns_name=self.website_endpoint,
+                                   alias_evaluate_target_health=False)
+            records.commit()
+            self.nameservers = zone.get_nameservers()
 
     def delete_hosted_zone(self, r53_connection=None, zone=None):
         """
@@ -187,7 +186,7 @@ class Site:
         s3_keys = {}
         obsolete_s3_keys = []
         for key in bucket_list_result:
-            s3_keys[key.name] = key.etag[1:-1]
+            s3_keys[key.name] = key.etag.strip('"')
             if key.name not in self.site_files:
                 obsolete_s3_keys.append(key.name)
         bucket.delete_keys(obsolete_s3_keys)
