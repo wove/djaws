@@ -57,7 +57,7 @@ class Site:
         if name.split('.')[0] == 'www':
             return name.partition('www.')[2]
         else:
-            return 'www.{}'.format(self.name)
+            return 'www.{}'.format(name)
 
     def create_buckets(self, s3_connection=None, location=''):
         """
@@ -127,7 +127,7 @@ class Site:
 
     def delete_hosted_zone(self, r53_connection=None, zone=None):
         """
-        Deletes a hosted zone named `self.name`
+        Deletes a hosted zone.
         """
         if r53_connection is None:
             r53_connection = connect_route53(self.aws_access_key_id,
@@ -140,7 +140,7 @@ class Site:
 
     def delete_site(self):
         """
-        Deletes the s3 buckets.
+        Deletes the s3 buckets and any associated hosted zone.
         """
         s3_connection = connect_s3(self.aws_access_key_id,
                                    self.aws_secret_access_key)
