@@ -23,10 +23,10 @@
     mysite = Site('example.com')
     mysite.publish_site()
 
-    Your site will now be available at example.com.s3-website-us-east-1.amazonaws.com. If you want to use 
-    a custom domain (e.g. to make the site available to view at example.com) you should use `.publish_site(hosted_zone=True)` 
-    and then use the list of nameservers available in `mysite.nameservers` to update your domain's nameservers 
-    according to your domain registrar's instructions.
+Your site will now be available at example.com.s3-website-us-east-1.amazonaws.com. If you want to use 
+a custom domain (e.g. to make the site available to view at example.com) you should use `.publish_site(hosted_zone=True)` 
+and then use the list of nameservers available in `mysite.nameservers` to update your domain's nameservers 
+according to your domain registrar's instructions.
 
 **Delete your site**
 
