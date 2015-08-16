@@ -122,7 +122,7 @@ class Site:
                                    alias_dns_name=self.website_endpoint,
                                    alias_evaluate_target_health=False)
             records.commit()
-            self.nameservers = zone.get_nameservers()
+        self.nameservers = zone.get_nameservers()
 
     def delete_hosted_zone(self, r53_connection=None, zone=None):
         """
